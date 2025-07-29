@@ -36,6 +36,9 @@
         .error {
             color: red;
         }
+        .success {
+            color: green;
+        }
     </style>
 </head>
 <body>
@@ -58,24 +61,11 @@
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
                         resultDiv.innerHTML = `<p>Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>`;
-                        reverseGeocode(lat, lon);
+                        // Сначала пробуем Яндекс
+                        reverseGeocodeYandex(lat, lon, resultDiv);
                     },
                     (error) => {
-                        let errorMessage;
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMessage = "Вы запретили доступ к геолокации. Разрешите его в настройках браузера.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMessage = "Информация о местоположении недоступна.";
-                                break;
-                            case error.TIMEOUT:
-                                errorMessage = "Время ожидания истекло.";
-                                break;
-                            default:
-                                errorMessage = "Произошла неизвестная ошибка.";
-                        }
-                        resultDiv.innerHTML = `<p class="error">Ошибка: ${errorMessage}</p>`;
+                        handleGeolocationError(error, resultDiv);
                     },
                     { enableHighAccuracy: true, timeout: 10000 }
                 );
@@ -84,8 +74,7 @@
             }
         }
 
-        function reverseGeocode(lat, lon) {
-            const resultDiv = document.getElementById('result');
+        function reverseGeocodeYandex(lat, lon, resultDiv) {
             const url = `https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${lon},${lat}`;
 
             fetch(url)
@@ -94,14 +83,52 @@
                     try {
                         const address = data.response.GeoObjectCollection.featureMember[0]
                             .GeoObject.metaDataProperty.GeocoderMetaData.text;
-                        resultDiv.innerHTML += `<p><strong>Ваш адрес:</strong> ${address}</p>`;
+                        resultDiv.innerHTML += `<p class="success"><strong>Адрес (Яндекс):</strong> ${address}</p>`;
                     } catch (e) {
-                        resultDiv.innerHTML += '<p class="error">Не удалось определить адрес по координатам.</p>';
+                        resultDiv.innerHTML += '<p>Не удалось определить адрес через Яндекс. Пробуем OpenStreetMap...</p>';
+                        // Если Яндекс не сработал, пробуем OSM
+                        reverseGeocodeOSM(lat, lon, resultDiv);
                     }
                 })
                 .catch(error => {
-                    resultDiv.innerHTML += `<p class="error">Ошибка при запросе к Яндекс.Геокодеру: ${error.message}</p>`;
+                    resultDiv.innerHTML += '<p>Ошибка запроса к Яндекс.Геокодеру. Пробуем OpenStreetMap...</p>';
+                    reverseGeocodeOSM(lat, lon, resultDiv);
                 });
+        }
+
+        function reverseGeocodeOSM(lat, lon, resultDiv) {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    const address = data.display_name || 'Адрес не определён';
+                    resultDiv.innerHTML += `<p class="success"><strong>Адрес (OpenStreetMap):</strong> ${address}</p>`;
+                })
+                .catch(error => {
+                    resultDiv.innerHTML += `<p class="error">Не удалось определить адрес: ${error.message}</p>`;
+                });
+        }
+
+        function handleGeolocationError(error, resultDiv) {
+            let errorMessage;
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Вы запретили доступ к геолокации. Разрешите его в настройках браузера.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Информация о местоположении недоступна.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "Время ожидания истекло.";
+                    break;
+                default:
+                    errorMessage = "Произошла неизвестная ошибка.";
+            }
+            resultDiv.innerHTML = `<p class="error">Ошибка геолокации: ${errorMessage}</p>`;
         }
     </script>
 </body>
