@@ -82,6 +82,7 @@
         </div>
     </div>
 
+    <script>
         const YANDEX_API_KEY = '384f966a-39b0-459a-8068-6d95fdf98170';
         
         function getLocation() {
@@ -97,7 +98,7 @@
                             <p class="success">Координаты получены:</p>
                             <p>Широта: <span class="coordinates">${lat.toFixed(6)}</span></p>
                             <p>Долгота: <span class="coordinates">${lon.toFixed(6)}</span></p>
-                            <p>Запрашиваю адрес...</p>
+                            <p>Запрашиваю адрес...</p>`;
                         
                         getAddressFromYandex(lat, lon, resultDiv);
                         getAddressFromOSM(lat, lon, resultDiv);
@@ -166,7 +167,7 @@
                 });
         }
 
-        
+        // Запрос к OpenStreetMap
         function getAddressFromOSM(lat, lon, resultDiv) {
             const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=ru`;
 
@@ -214,6 +215,7 @@
                     `;
                     resultDiv.appendChild(errorElem);
                 });
+        }
         
         function translatePrecision(precision) {
             const translations = {
