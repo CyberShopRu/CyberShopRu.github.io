@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Точное определение адреса</title>
+    <title>адресс</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -82,9 +82,7 @@
         </div>
     </div>
 
-    <script>
-        // Ключ API Яндекс.Карт (замените на свой)
-        const YANDEX_API_KEY = 'ваш_яндекс_ключ';
+        const YANDEX_API_KEY = '384f966a-39b0-459a-8068-6d95fdf98170';
         
         function getLocation() {
             const resultDiv = document.getElementById('result');
@@ -100,9 +98,7 @@
                             <p>Широта: <span class="coordinates">${lat.toFixed(6)}</span></p>
                             <p>Долгота: <span class="coordinates">${lon.toFixed(6)}</span></p>
                             <p>Запрашиваю адрес...</p>
-                        `;
                         
-                        // Запрашиваем адрес у обоих сервисов
                         getAddressFromYandex(lat, lon, resultDiv);
                         getAddressFromOSM(lat, lon, resultDiv);
                     },
@@ -170,7 +166,7 @@
                 });
         }
 
-        // Запрос к OpenStreetMap Nominatim
+        
         function getAddressFromOSM(lat, lon, resultDiv) {
             const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=ru`;
 
@@ -218,9 +214,7 @@
                     `;
                     resultDiv.appendChild(errorElem);
                 });
-        }
-
-        // Перевод точности на русский
+        
         function translatePrecision(precision) {
             const translations = {
                 'exact': 'точное',
