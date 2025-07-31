@@ -3,23 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Определение адреса по GPS</title>
+    <title>Геокодирование и определение адреса</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 50px;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
             background-color: #f5f5f5;
         }
-        #result {
-            margin: 20px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .section {
             background-color: white;
-            max-width: 500px;
-            margin-left: auto;
-            margin-right: auto;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
         }
         button {
             padding: 10px 20px;
@@ -29,28 +35,64 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            margin: 10px 0;
         }
         button:hover {
             background-color: #45a049;
         }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #result, #geocode-result {
+            margin-top: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
         .error {
             color: red;
         }
-        .success {
-            color: green;
+        .coordinates {
+            font-family: monospace;
+            background-color: #eee;
+            padding: 2px 5px;
+            border-radius: 3px;
         }
     </style>
 </head>
 <body>
-    <h1>Определение вашего точного адреса</h1>
-    <p>Нажмите кнопку, чтобы разрешить доступ к вашей геолокации.</p>
-    <button onclick="getLocation()">Определить мой адрес</button>
-    <div id="result"></div>
+    <div class="container">
+        <h1>Сервис геокодирования Яндекс.Карт</h1>
+        
+        <!-- Секция определения местоположения -->
+        <div class="section">
+            <h2>Определение адреса по GPS</h2>
+            <p>Нажмите кнопку, чтобы разрешить доступ к вашей геолокации.</p>
+            <button onclick="getLocation()">Определить мой адрес</button>
+            <div id="result"></div>
+        </div>
+        
+        <!-- Секция геокодирования адреса -->
+        <div class="section">
+            <h2>Геокодирование адреса</h2>
+            <p>Введите адрес для получения координат:</p>
+            <input type="text" id="address-input" placeholder="Например: Москва, Красная площадь">
+            <button onclick="geocodeAddress()">Найти координаты</button>
+            <div id="geocode-result"></div>
+        </div>
+    </div>
 
     <script>
         // Замените этот ключ на ваш API-ключ от Яндекс.Карт
         const YANDEX_API_KEY = '384f966a-39b0-459a-8068-6d95fdf98170';
 
+        // Функция для определения местоположения
         function getLocation() {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = '<p>Определение местоположения...</p>';
@@ -60,12 +102,25 @@
                     (position) => {
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
-                        resultDiv.innerHTML = `<p>Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>`;
-                        // Сначала пробуем Яндекс
-                        reverseGeocodeYandex(lat, lon, resultDiv);
+                        resultDiv.innerHTML = `<p>Ваши координаты: <span class="coordinates">${lat.toFixed(6)}, ${lon.toFixed(6)}</span></p>`;
+                        reverseGeocode(lat, lon, resultDiv);
                     },
                     (error) => {
-                        handleGeolocationError(error, resultDiv);
+                        let errorMessage;
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = "Вы запретили доступ к геолокации. Разрешите его в настройках браузера.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = "Информация о местоположении недоступна.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = "Время ожидания истекло.";
+                                break;
+                            default:
+                                errorMessage = "Произошла неизвестная ошибка.";
+                        }
+                        resultDiv.innerHTML = `<p class="error">Ошибка: ${errorMessage}</p>`;
                     },
                     { enableHighAccuracy: true, timeout: 10000 }
                 );
@@ -74,61 +129,98 @@
             }
         }
 
-        function reverseGeocodeYandex(lat, lon, resultDiv) {
+        // Функция обратного геокодирования (координаты → адрес)
+        function reverseGeocode(lat, lon, resultDiv) {
             const url = `https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${lon},${lat}`;
 
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     try {
-                        const address = data.response.GeoObjectCollection.featureMember[0]
-                            .GeoObject.metaDataProperty.GeocoderMetaData.text;
-                        resultDiv.innerHTML += `<p class="success"><strong>Адрес (Яндекс):</strong> ${address}</p>`;
+                        const geoObject = data.response.GeoObjectCollection.featureMember[0].GeoObject;
+                        const address = geoObject.metaDataProperty.GeocoderMetaData.text;
+                        const precision = geoObject.metaDataProperty.GeocoderMetaData.precision;
+                        
+                        let additionalInfo = '';
+                        if (geoObject.boundedBy) {
+                            const envelope = geoObject.boundedBy.Envelope;
+                            additionalInfo = `<p>Границы местоположения:<br>
+                                Юго-запад: <span class="coordinates">${envelope.lowerCorner.split(' ').reverse().join(', ')}</span><br>
+                                Северо-восток: <span class="coordinates">${envelope.upperCorner.split(' ').reverse().join(', ')}</span></p>`;
+                        }
+                        
+                        resultDiv.innerHTML += `
+                            <p><strong>Ваш адрес:</strong> ${address}</p>
+                            <p>Точность: ${translatePrecision(precision)}</p>
+                            ${additionalInfo}`;
                     } catch (e) {
-                        resultDiv.innerHTML += '<p>Не удалось определить адрес через Яндекс. Пробуем OpenStreetMap...</p>';
-                        // Если Яндекс не сработал, пробуем OSM
-                        reverseGeocodeOSM(lat, lon, resultDiv);
+                        resultDiv.innerHTML += '<p class="error">Не удалось определить адрес по координатам.</p>';
                     }
                 })
                 .catch(error => {
-                    resultDiv.innerHTML += '<p>Ошибка запроса к Яндекс.Геокодеру. Пробуем OpenStreetMap...</p>';
-                    reverseGeocodeOSM(lat, lon, resultDiv);
+                    resultDiv.innerHTML += `<p class="error">Ошибка при запросе к Яндекс.Геокодеру: ${error.message}</p>`;
                 });
         }
 
-        function reverseGeocodeOSM(lat, lon, resultDiv) {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
+        // Функция геокодирования (адрес → координаты)
+        function geocodeAddress() {
+            const address = document.getElementById('address-input').value.trim();
+            const resultDiv = document.getElementById('geocode-result');
+            
+            if (!address) {
+                resultDiv.innerHTML = '<p class="error">Пожалуйста, введите адрес</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>Поиск координат...</p>';
+            const url = `https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${encodeURIComponent(address)}`;
 
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
+                    try {
+                        const geoObjects = data.response.GeoObjectCollection.featureMember;
+                        if (geoObjects.length === 0) {
+                            resultDiv.innerHTML = '<p class="error">Адрес не найден</p>';
+                            return;
+                        }
+                        
+                        let resultsHTML = '';
+                        geoObjects.slice(0, 3).forEach((item, index) => {
+                            const geoObject = item.GeoObject;
+                            const address = geoObject.metaDataProperty.GeocoderMetaData.text;
+                            const pos = geoObject.Point.pos.split(' ').reverse().join(', ');
+                            const precision = geoObject.metaDataProperty.GeocoderMetaData.precision;
+                            
+                            resultsHTML += `
+                                <div style="margin-bottom: 15px;">
+                                    <p><strong>Результат ${index + 1}:</strong> ${address}</p>
+                                    <p>Координаты: <span class="coordinates">${pos}</span></p>
+                                    <p>Точность: ${translatePrecision(precision)}</p>
+                                </div>`;
+                        });
+                        
+                        resultDiv.innerHTML = resultsHTML;
+                    } catch (e) {
+                        resultDiv.innerHTML = '<p class="error">Ошибка при обработке ответа от сервера</p>';
                     }
-                    const address = data.display_name || 'Адрес не определён';
-                    resultDiv.innerHTML += `<p class="success"><strong>Адрес (OpenStreetMap):</strong> ${address}</p>`;
                 })
                 .catch(error => {
-                    resultDiv.innerHTML += `<p class="error">Не удалось определить адрес: ${error.message}</p>`;
+                    resultDiv.innerHTML = `<p class="error">Ошибка при запросе к Яндекс.Геокодеру: ${error.message}</p>`;
                 });
         }
 
-        function handleGeolocationError(error, resultDiv) {
-            let errorMessage;
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMessage = "Вы запретили доступ к геолокации. Разрешите его в настройках браузера.";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMessage = "Информация о местоположении недоступна.";
-                    break;
-                case error.TIMEOUT:
-                    errorMessage = "Время ожидания истекло.";
-                    break;
-                default:
-                    errorMessage = "Произошла неизвестная ошибка.";
-            }
-            resultDiv.innerHTML = `<p class="error">Ошибка геолокации: ${errorMessage}</p>`;
+        // Функция для перевода точности на русский
+        function translatePrecision(precision) {
+            const translations = {
+                'exact': 'точное',
+                'number': 'номер дома',
+                'near': 'близкое',
+                'range': 'диапазон',
+                'street': 'улица',
+                'other': 'другое'
+            };
+            return translations[precision] || precision;
         }
     </script>
 </body>
