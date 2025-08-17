@@ -1,55 +1,111 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Простой звонок</title>
+    <title>🚀 Простой видеозвонок</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+        video { width: 300px; border: 2px solid #333; margin: 10px; }
+        button { padding: 10px 20px; font-size: 16px; margin: 5px; }
+        #roomLink { margin: 20px; font-size: 18px; word-break: break-all; }
+    </style>
 </head>
 <body>
-    <h1>Звонок через WebRTC</h1>
-    <video id="localVideo" autoplay muted></video>
-    <video id="remoteVideo" autoplay></video>
-    <button id="callButton">Позвонить</button>
+    <h1>📞 Видеозвонок с другом</h1>
+    
+    <div>
+        <video id="localVideo" autoplay muted></video>
+        <video id="remoteVideo" autoplay></video>
+    </div>
+
+    <button id="createRoomBtn">Создать комнату</button>
+    <div id="roomLink"></div>
+
     <script>
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
-        const callButton = document.getElementById('callButton');
+        const createRoomBtn = document.getElementById('createRoomBtn');
+        const roomLinkDiv = document.getElementById('roomLink');
 
         let localStream;
         let peerConnection;
+        let roomId;
 
         // Запуск камеры и микрофона
-        async function startStream() {
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            localVideo.srcObject = localStream;
+        async function startCamera() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+            } catch (err) {
+                alert("Ошибка доступа к камере/микрофону: " + err.message);
+            }
         }
 
-        // Создание PeerConnection (упрощённо)
-        async function createCall() {
-            const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-            peerConnection = new RTCPeerConnection(configuration);
+        // Создать комнату
+        createRoomBtn.addEventListener('click', async () => {
+            roomId = generateRoomId();
+            const roomLink = `${window.location.href}?room=${roomId}`;
+            roomLinkDiv.innerHTML = `🔗 Ссылка для друга: <a href="${roomLink}" target="_blank">${roomLink}</a>`;
+            
+            await startCamera();
+            setupPeerConnection();
+            
+            // Если в URL уже есть комната (друг перешёл по ссылке)
+            checkRoomInURL();
+        });
 
-            // Передача своего потока собеседнику
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        // Генератор ID комнаты
+        function generateRoomId() {
+            return Math.random().toString(36).substring(2, 8);
+        }
 
-            // Получение потока от собеседника
+        // Настройка WebRTC
+        function setupPeerConnection() {
+            peerConnection = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            // Передача своего потока
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // Получение чужого потока
             peerConnection.ontrack = event => {
                 remoteVideo.srcObject = event.streams[0];
             };
 
-            // Обмен ICE-кандидатами (в реальном проекте нужен сервер или ручной обмен)
+            // Обмен ICE-кандидатами (для P2P-соединения)
             peerConnection.onicecandidate = event => {
                 if (event.candidate) {
                     console.log("ICE-кандидат:", event.candidate);
                 }
             };
-
-            // Создание оффера и установка локального описания
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            console.log("Оффер:", offer);
         }
 
-        callButton.addEventListener('click', createCall);
-        startStream();
+        // Проверка комнаты в URL (если друг перешёл по ссылке)
+        function checkRoomInURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const existingRoomId = urlParams.get('room');
+            
+            if (existingRoomId && existingRoomId !== roomId) {
+                roomId = existingRoomId;
+                startCamera().then(() => {
+                    setupPeerConnection();
+                    joinRoom();
+                });
+            }
+        }
+
+        // Присоединиться к комнате
+        async function joinRoom() {
+            console.log("Присоединяемся к комнате:", roomId);
+            // Здесь можно добавить логику для обмена SDP (если нужен сигналинг)
+        }
+
+        // Проверка при загрузке страницы
+        window.addEventListener('load', () => {
+            checkRoomInURL();
+        });
     </script>
 </body>
 </html>
