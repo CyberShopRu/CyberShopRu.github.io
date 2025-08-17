@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Простой звонок</title>
+</head>
+<body>
+    <h1>Звонок через WebRTC</h1>
+    <video id="localVideo" autoplay muted></video>
+    <video id="remoteVideo" autoplay></video>
+    <button id="callButton">Позвонить</button>
+    <script>
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const callButton = document.getElementById('callButton');
+
+        let localStream;
+        let peerConnection;
+
+        // Запуск камеры и микрофона
+        async function startStream() {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+        }
+
+        // Создание PeerConnection (упрощённо)
+        async function createCall() {
+            const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            peerConnection = new RTCPeerConnection(configuration);
+
+            // Передача своего потока собеседнику
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            // Получение потока от собеседника
+            peerConnection.ontrack = event => {
+                remoteVideo.srcObject = event.streams[0];
+            };
+
+            // Обмен ICE-кандидатами (в реальном проекте нужен сервер или ручной обмен)
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    console.log("ICE-кандидат:", event.candidate);
+                }
+            };
+
+            // Создание оффера и установка локального описания
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            console.log("Оффер:", offer);
+        }
+
+        callButton.addEventListener('click', createCall);
+        startStream();
+    </script>
+</body>
+</html>
