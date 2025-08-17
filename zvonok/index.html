@@ -3,54 +3,20 @@
 <head>
     <title>🚀 Видеозвонок P2P</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            text-align: center;
-        }
-        #videos {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 20px;
-            margin: 20px 0;
-        }
-        video {
-            width: 300px;
-            height: 225px;
-            background: #000;
-            border-radius: 8px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            margin: 5px;
-            cursor: pointer;
-            border: none;
-            border-radius: 4px;
-            background: #4285f4;
-            color: white;
-        }
-        textarea {
-            width: 100%;
-            height: 100px;
-            margin: 10px 0;
-            padding: 10px;
-            box-sizing: border-box;
-        }
-        #controls {
-            margin: 20px 0;
-        }
-        #status {
-            margin: 10px 0;
-            color: #666;
-        }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; text-align: center; }
+        #videos { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 20px 0; }
+        video { width: 300px; height: 225px; background: #000; border-radius: 8px; }
+        button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; background: #4285f4; color: white; }
+        textarea { width: 100%; height: 100px; margin: 10px 0; padding: 10px; box-sizing: border-box; }
+        #controls { margin: 20px 0; }
+        #status { margin: 10px 0; color: #666; }
+        .warning { color: red; font-weight: bold; }
     </style>
 </head>
 <body>
     <h1>📞 Видеозвонок P2P</h1>
+    
+    <div id="compatibilityWarning" class="warning"></div>
     
     <div id="videos">
         <video id="localVideo" autoplay muted playsinline></video>
@@ -79,173 +45,227 @@
     </div>
 
     <script>
-        // Элементы страницы
-        const localVideo = document.getElementById('localVideo');
-        const remoteVideo = document.getElementById('remoteVideo');
-        const startBtn = document.getElementById('startBtn');
-        const callBtn = document.getElementById('callBtn');
-        const hangupBtn = document.getElementById('hangupBtn');
-        const offerSdp = document.getElementById('offerSdp');
-        const remoteSdp = document.getElementById('remoteSdp');
-        const answerBtn = document.getElementById('answerBtn');
-        const copyBtn = document.getElementById('copyBtn');
-        const statusDiv = document.getElementById('status');
-
-        let localStream;
-        let peerConnection;
-        let isCaller = false;
-
-        // 1. Включение камеры
-        startBtn.addEventListener('click', async () => {
-            try {
-                statusDiv.textContent = "Статус: Получаем доступ к камере...";
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                localVideo.srcObject = localStream;
-                
-                startBtn.disabled = true;
-                callBtn.disabled = false;
-                statusDiv.textContent = "Статус: Камера включена. Можете создать звонок";
-            } catch (err) {
-                statusDiv.textContent = "Ошибка: " + err.message;
-                console.error("Ошибка доступа к медиаустройствам:", err);
-            }
-        });
-
-        // 2. Создание звонка (Caller)
-        callBtn.addEventListener('click', async () => {
-            try {
-                statusDiv.textContent = "Статус: Создаем звонок...";
-                isCaller = true;
-                setupPeerConnection();
-                
-                // Создаем предложение (offer)
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                
-                // Генерируем ссылку для друга
-                const offerData = {
-                    sdp: window.btoa(JSON.stringify(offer)),
-                    type: 'offer'
-                };
-                const url = new URL(window.location.href);
-                url.searchParams.set('call', encodeURIComponent(JSON.stringify(offerData)));
-                offerSdp.value = url.toString();
-                
-                callBtn.disabled = true;
-                hangupBtn.disabled = false;
-                answerBtn.disabled = true;
-                statusDiv.textContent = "Статус: Ожидаем ответа... Отправьте ссылку другу";
-            } catch (err) {
-                statusDiv.textContent = "Ошибка при создании звонка: " + err.message;
-                console.error("Ошибка создания offer:", err);
-            }
-        });
-
-        // 3. Принятие звонка (Callee)
-        answerBtn.addEventListener('click', async () => {
-            try {
-                if (!remoteSdp.value) return;
-                
-                statusDiv.textContent = "Статус: Принимаем звонок...";
-                const offerData = JSON.parse(decodeURIComponent(new URL(remoteSdp.value).searchParams.get('call')));
-                const offer = JSON.parse(window.atob(offerData.sdp));
-                
-                setupPeerConnection();
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                
-                // Создаем ответ (answer)
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                
-                // Генерируем ответ для копирования
-                const answerData = {
-                    sdp: window.btoa(JSON.stringify(answer)),
-                    type: 'answer'
-                };
-                remoteSdp.value = JSON.stringify(answerData);
-                
-                answerBtn.disabled = true;
-                hangupBtn.disabled = false;
-                statusDiv.textContent = "Статус: Звонок установлен!";
-            } catch (err) {
-                statusDiv.textContent = "Ошибка при принятии звонка: " + err.message;
-                console.error("Ошибка обработки answer:", err);
-            }
-        });
-
-        // 4. Завершение звонка
-        hangupBtn.addEventListener('click', () => {
-            closeConnection();
-            statusDiv.textContent = "Статус: Звонок завершен";
-        });
-
-        // 5. Копирование ссылки
-        copyBtn.addEventListener('click', () => {
-            offerSdp.select();
-            document.execCommand('copy');
-            statusDiv.textContent = "Статус: Ссылка скопирована в буфер!";
-        });
-
-        // Настройка PeerConnection
-        function setupPeerConnection() {
-            peerConnection = new RTCPPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
-            });
-
-            // Добавляем наш поток
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
-            });
-
-            // Получаем удаленный поток
-            peerConnection.ontrack = event => {
-                remoteVideo.srcObject = event.streams[0];
-            };
-
-            // Обработка ICE кандидатов
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    console.log("Новый ICE кандидат:", event.candidate);
-                }
-            };
-
-            peerConnection.onconnectionstatechange = () => {
-                statusDiv.textContent = `Статус соединения: ${peerConnection.connectionState}`;
-                if (peerConnection.connectionState === 'disconnected') {
-                    closeConnection();
-                }
-            };
-        }
-
-        // Закрытие соединения
-        function closeConnection() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            if (remoteVideo.srcObject) {
-                remoteVideo.srcObject.getTracks().forEach(track => track.stop());
-                remoteVideo.srcObject = null;
-            }
-            hangupBtn.disabled = true;
-            callBtn.disabled = !localStream;
-            answerBtn.disabled = false;
-        }
-
-        // Проверка URL при загрузке
-        window.addEventListener('load', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const callParam = urlParams.get('call');
+        // Проверка поддержки WebRTC
+        function checkWebRTCSupport() {
+            const warningEl = document.getElementById('compatibilityWarning');
+            const requiredFeatures = [
+                'RTCPeerConnection',
+                'navigator.mediaDevices',
+                'navigator.mediaDevices.getUserMedia'
+            ];
             
-            if (callParam) {
-                remoteSdp.value = window.location.href;
-                answerBtn.disabled = false;
-                statusDiv.textContent = "Статус: Обнаружен входящий звонок. Включите камеру и нажмите 'Принять звонок'";
+            const missingFeatures = requiredFeatures.filter(feature => {
+                if (feature.includes('.')) {
+                    const parts = feature.split('.');
+                    return !window[parts[0]]?.[parts[1]];
+                }
+                return !window[feature];
+            });
+            
+            if (missingFeatures.length > 0) {
+                warningEl.innerHTML = `Ваш браузер не поддерживает WebRTC!<br>Отсутствуют: ${missingFeatures.join(', ')}<br>Попробуйте Chrome/Firefox/Safari (последние версии)`;
+                document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+                return false;
             }
-        });
+            
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                warningEl.innerHTML = 'WebRTC требует HTTPS!<br>Откройте эту страницу через HTTPS или localhost';
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Инициализация только если WebRTC поддерживается
+        if (checkWebRTCSupport()) {
+            // Элементы страницы
+            const localVideo = document.getElementById('localVideo');
+            const remoteVideo = document.getElementById('remoteVideo');
+            const startBtn = document.getElementById('startBtn');
+            const callBtn = document.getElementById('callBtn');
+            const hangupBtn = document.getElementById('hangupBtn');
+            const offerSdp = document.getElementById('offerSdp');
+            const remoteSdp = document.getElementById('remoteSdp');
+            const answerBtn = document.getElementById('answerBtn');
+            const copyBtn = document.getElementById('copyBtn');
+            const statusDiv = document.getElementById('status');
+
+            let localStream;
+            let peerConnection;
+            let isCaller = false;
+
+            // 1. Включение камеры
+            startBtn.addEventListener('click', async () => {
+                try {
+                    statusDiv.textContent = "Статус: Получаем доступ к камере...";
+                    localStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: true, 
+                        audio: true 
+                    });
+                    localVideo.srcObject = localStream;
+                    
+                    startBtn.disabled = true;
+                    callBtn.disabled = false;
+                    answerBtn.disabled = false;
+                    statusDiv.textContent = "Статус: Камера включена. Можете создать звонок";
+                } catch (err) {
+                    statusDiv.textContent = "Ошибка: " + err.message;
+                    console.error("Ошибка доступа к медиаустройствам:", err);
+                }
+            });
+
+            // 2. Создание звонка (Caller)
+            callBtn.addEventListener('click', async () => {
+                try {
+                    statusDiv.textContent = "Статус: Создаем звонок...";
+                    isCaller = true;
+                    setupPeerConnection();
+                    
+                    // Создаем предложение (offer)
+                    const offer = await peerConnection.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true
+                    });
+                    await peerConnection.setLocalDescription(offer);
+                    
+                    // Генерируем ссылку для друга
+                    const offerData = {
+                        sdp: window.btoa(JSON.stringify(offer)),
+                        type: 'offer'
+                    };
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('call', encodeURIComponent(JSON.stringify(offerData)));
+                    offerSdp.value = url.toString();
+                    
+                    callBtn.disabled = true;
+                    hangupBtn.disabled = false;
+                    answerBtn.disabled = true;
+                    statusDiv.textContent = "Статус: Ожидаем ответа... Отправьте ссылку другу";
+                } catch (err) {
+                    statusDiv.textContent = "Ошибка при создании звонка: " + err.message;
+                    console.error("Ошибка создания offer:", err);
+                }
+            });
+
+            // 3. Принятие звонка (Callee)
+            answerBtn.addEventListener('click', async () => {
+                try {
+                    if (!remoteSdp.value) {
+                        statusDiv.textContent = "Статус: Вставьте ссылку от друга!";
+                        return;
+                    }
+                    
+                    statusDiv.textContent = "Статус: Принимаем звонок...";
+                    let offerData;
+                    
+                    try {
+                        const url = new URL(remoteSdp.value);
+                        offerData = JSON.parse(decodeURIComponent(url.searchParams.get('call')));
+                    } catch {
+                        offerData = JSON.parse(remoteSdp.value);
+                    }
+                    
+                    const offer = JSON.parse(window.atob(offerData.sdp));
+                    
+                    setupPeerConnection();
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    
+                    // Создаем ответ (answer)
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    
+                    // Генерируем ответ для копирования
+                    const answerData = {
+                        sdp: window.btoa(JSON.stringify(answer)),
+                        type: 'answer'
+                    };
+                    remoteSdp.value = JSON.stringify(answerData);
+                    
+                    answerBtn.disabled = true;
+                    hangupBtn.disabled = false;
+                    statusDiv.textContent = "Статус: Звонок установлен!";
+                } catch (err) {
+                    statusDiv.textContent = "Ошибка при принятии звонка: " + err.message;
+                    console.error("Ошибка обработки answer:", err);
+                }
+            });
+
+            // 4. Завершение звонка
+            hangupBtn.addEventListener('click', () => {
+                closeConnection();
+                statusDiv.textContent = "Статус: Звонок завершен";
+            });
+
+            // 5. Копирование ссылки
+            copyBtn.addEventListener('click', () => {
+                offerSdp.select();
+                document.execCommand('copy');
+                statusDiv.textContent = "Статус: Ссылка скопирована в буфер!";
+            });
+
+            // Настройка PeerConnection
+            function setupPeerConnection() {
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ]
+                });
+
+                // Добавляем наш поток
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                // Получаем удаленный поток
+                peerConnection.ontrack = event => {
+                    if (!remoteVideo.srcObject) {
+                        remoteVideo.srcObject = event.streams[0];
+                    }
+                };
+
+                // Обработка ICE кандидатов
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        console.log("Новый ICE кандидат:", event.candidate);
+                    }
+                };
+
+                peerConnection.oniceconnectionstatechange = () => {
+                    statusDiv.textContent = `Статус ICE: ${peerConnection.iceConnectionState}`;
+                    if (peerConnection.iceConnectionState === 'disconnected') {
+                        closeConnection();
+                    }
+                };
+            }
+
+            // Закрытие соединения
+            function closeConnection() {
+                if (peerConnection) {
+                    peerConnection.close();
+                    peerConnection = null;
+                }
+                if (remoteVideo.srcObject) {
+                    remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+                    remoteVideo.srcObject = null;
+                }
+                hangupBtn.disabled = true;
+                callBtn.disabled = !localStream;
+                answerBtn.disabled = !localStream;
+            }
+
+            // Проверка URL при загрузке
+            window.addEventListener('load', () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const callParam = urlParams.get('call');
+                
+                if (callParam) {
+                    remoteSdp.value = window.location.href;
+                    statusDiv.textContent = "Статус: Обнаружен входящий звонок. Включите камеру и нажмите 'Принять звонок'";
+                }
+            });
+        }
     </script>
 </body>
 </html>
